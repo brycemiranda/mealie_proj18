@@ -11,6 +11,7 @@ from . import (
     organizers,
     parser,
     recipe,
+    recommendations,
     shared,
     unit_and_foods,
     users,
@@ -33,3 +34,4 @@ router.include_router(unit_and_foods.router)
 router.include_router(admin.router)
 router.include_router(validators.router)
 router.include_router(explore.router)
+router.include_router(recommendations.router)
