@@ -9,7 +9,7 @@
           Recommended for You
         </div>
         <div class="text-body-2 text-medium-emphasis">
-          Personalized recipes based on your tastes.
+          {{ ratingCount >= RATING_THRESHOLD ? 'Personalized picks based on your ratings.' : 'Discover recipes — rate 5 to unlock your personalized picks.' }}
         </div>
       </div>
       <div>
@@ -24,13 +24,7 @@
       </div>
     </div>
 
-    <v-tabs v-model="activeTab" color="primary" class="mb-4">
-      <v-tab value="foryou">For You</v-tab>
-      <v-tab value="favorites">Favorites</v-tab>
-    </v-tabs>
-
-    <v-window v-model="activeTab">
-      <v-window-item value="foryou">
+    <div>
 
         <!-- Carousel — unlocked after 5 ratings -->
         <template v-if="ratingCount >= RATING_THRESHOLD && carouselItems.length">
@@ -165,17 +159,7 @@
           </v-card-text>
         </v-card>
 
-      </v-window-item>
-
-      <v-window-item value="favorites">
-        <v-card class="recommendation-empty" variant="outlined">
-          <v-card-text class="pa-6 pa-md-8 text-center">
-            <div class="text-h6 font-weight-medium mb-2">Favorites</div>
-            <p class="text-body-2 text-medium-emphasis mb-0">Coming soon. Rated recipes will appear here.</p>
-          </v-card-text>
-        </v-card>
-      </v-window-item>
-    </v-window>
+    </div>
 
     <GenrePicker
       v-model="showGenrePicker"
@@ -203,7 +187,6 @@ import RecipeDetailModal from './RecipeDetailModal.vue';
 
 const RATING_THRESHOLD = 5;
 
-const activeTab = ref('foryou');
 const loading = ref(true);
 const loadingMore = ref(false);
 
@@ -252,15 +235,14 @@ async function fetchCarousel() {
 async function fetchFeed(page: number, append = false) {
   try {
     const res = await api.recommendations.getDiscovery(page, null, 20);
-    if (res.data?.items?.length) {
-      if (append) {
-        feedItems.value.push(...res.data.items);
-      } else {
-        feedItems.value = res.data.items;
-      }
-      hasMore.value = res.data.items.length >= 20;
-      currentPage.value = page;
+    const items = res.data?.items ?? [];
+    if (append) {
+      feedItems.value.push(...items);
+    } else {
+      feedItems.value = items;
     }
+    hasMore.value = items.length >= 20;
+    currentPage.value = page;
   } catch (err) {
     console.error('Failed to fetch feed', err);
   }
@@ -272,12 +254,12 @@ async function loadMore() {
   loadingMore.value = false;
 }
 
-function onPreferencesSaved(tags: string[]) {
+async function onPreferencesSaved(tags: string[]) {
   currentTags.value = tags;
   localStorage.setItem('mealie_genres', JSON.stringify(tags));
   needsOnboarding.value = false;
   showGenrePicker.value = false;
-  Promise.all([fetchCarousel(), fetchFeed(1)]);
+  await Promise.all([fetchCarousel(), fetchFeed(1)]);
 }
 
 function openRecipeDetail(recipe: DiscoveryItem) {
@@ -285,9 +267,9 @@ function openRecipeDetail(recipe: DiscoveryItem) {
   showRecipeModal.value = true;
 }
 
-function onRecipeRated() {
+async function onRecipeRated() {
   ratingCount.value = Math.min(ratingCount.value + 1, RATING_THRESHOLD);
-  Promise.all([fetchCarousel(), fetchFeed(1)]);
+  await Promise.all([fetchCarousel(), fetchFeed(1)]);
 }
 
 onMounted(loadStatusAndData);
