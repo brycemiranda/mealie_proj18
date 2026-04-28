@@ -77,12 +77,7 @@ class RecommendationController(BaseUserController):
         category: str | None = Query(None),
     ):
         prefs = get_prefs(self.session, self.user.id)
-        rating_count = prefs.rating_count if prefs else 0
-        user_categories = (
-            prefs.onboarding_tags
-            if prefs and prefs.onboarding_tags and rating_count < 5
-            else None
-        )
+        user_categories = prefs.onboarding_tags if prefs and prefs.onboarding_tags else None
         data = fetch_discovery(str(self.user.id), page=page, category=category, page_size=page_size, categories=user_categories)
         return DiscoveryResult(**data)
 
