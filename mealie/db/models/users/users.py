@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from ..household.shopping_list import ShoppingList
     from ..recipe import RecipeComment, RecipeModel, RecipeTimelineEvent
     from .password_reset import PasswordResetModel
+    from .user_ml_preferences import UserMLPreferences
 
 
 class LongLiveToken(SqlAlchemyBase, BaseMixins):
@@ -109,6 +110,13 @@ class User(SqlAlchemyBase, BaseMixins):
         primaryjoin="and_(User.id==UserToRecipe.user_id, UserToRecipe.is_favorite==True)",
         back_populates="favorited_by",
         overlaps="recipe,rated_by,rated_recipes",
+    )
+    ml_preferences: Mapped[Optional["UserMLPreferences"]] = orm.relationship(
+        "UserMLPreferences",
+        back_populates="user",
+        cascade="all, delete, delete-orphan",
+        single_parent=True,
+        uselist=False,
     )
     model_config = ConfigDict(
         exclude={
