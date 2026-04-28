@@ -19,7 +19,7 @@ INFERENCE_URL = os.getenv("INFERENCE_API_URL", "http://inference-api:8000")
 FEATURE_SERVICE_URL = os.getenv("FEATURE_SERVICE_URL", "http://feature-service.data.svc.cluster.local:8080")
 LEARNING_RATE = 0.1
 COLD_START_THRESHOLD = 5
-REQUEST_TIMEOUT = 2.0
+REQUEST_TIMEOUT = 15.0
 RATING_WEIGHTS: dict[int, float] = {5: 1.0, 4: 0.7, 3: 0.0, 2: -0.5, 1: -1.0}
 
 # Must match ingest.py CATEGORIES

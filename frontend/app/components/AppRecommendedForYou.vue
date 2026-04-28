@@ -180,6 +180,7 @@
     <GenrePicker
       v-model="showGenrePicker"
       :can-cancel="!needsOnboarding"
+      :initial-selection="currentTags"
       @saved="onPreferencesSaved"
     />
 
@@ -209,6 +210,7 @@ const loadingMore = ref(false);
 const showGenrePicker = ref(false);
 const needsOnboarding = ref(false);
 const ratingCount = ref(0);
+const currentTags = ref<string[]>(JSON.parse(localStorage.getItem('mealie_genres') || '[]'));
 
 const carouselItems = ref<DiscoveryItem[]>([]);
 const feedItems = ref<DiscoveryItem[]>([]);
@@ -270,7 +272,9 @@ async function loadMore() {
   loadingMore.value = false;
 }
 
-function onPreferencesSaved() {
+function onPreferencesSaved(tags: string[]) {
+  currentTags.value = tags;
+  localStorage.setItem('mealie_genres', JSON.stringify(tags));
   needsOnboarding.value = false;
   showGenrePicker.value = false;
   Promise.all([fetchCarousel(), fetchFeed(1)]);
