@@ -14,7 +14,8 @@ class RecommendationPreferencesIn(MealieModel):
 
 
 class RecommendationDismissIn(MealieModel):
-    recipe_id: UUID4
+    recipe_id: str
+    tags: list[str] = Field(default_factory=list)
 
 
 class RecommendationAck(MealieModel):

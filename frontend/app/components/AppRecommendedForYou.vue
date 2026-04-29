@@ -48,9 +48,18 @@
                       <v-chip color="primary" size="x-small" variant="flat">
                         {{ recipe.category }}
                       </v-chip>
-                      <span v-if="Math.round(recipe.score * 100) >= 1" class="text-caption text-white">
-                        {{ Math.round(recipe.score * 100) }}% Match
-                      </span>
+                      <div class="d-flex align-center ga-1">
+                        <span v-if="Math.round(recipe.score * 100) >= 1" class="text-caption text-white">
+                          {{ Math.round(recipe.score * 100) }}% Match
+                        </span>
+                        <v-btn
+                          icon="mdi-close"
+                          size="x-small"
+                          variant="text"
+                          color="white"
+                          @click.stop="dismissRecipe(recipe)"
+                        ></v-btn>
+                      </div>
                     </div>
                     <div class="recommendation-title-overlay px-3 pb-3">
                       {{ recipe.name }}
@@ -112,9 +121,18 @@
                     <v-chip color="primary" size="x-small" variant="flat">
                       {{ recipe.category }}
                     </v-chip>
-                    <span v-if="Math.round(recipe.score * 100) >= 1" class="text-caption text-white">
-                      {{ Math.round(recipe.score * 100) }}% Match
-                    </span>
+                    <div class="d-flex align-center ga-1">
+                      <span v-if="Math.round(recipe.score * 100) >= 1" class="text-caption text-white">
+                        {{ Math.round(recipe.score * 100) }}% Match
+                      </span>
+                      <v-btn
+                        icon="mdi-close"
+                        size="x-small"
+                        variant="text"
+                        color="white"
+                        @click.stop="dismissRecipe(recipe)"
+                      ></v-btn>
+                    </div>
                   </div>
                   <div class="recommendation-title-overlay px-3 pb-3">
                     {{ recipe.name }}
@@ -172,6 +190,7 @@
       v-model="showRecipeModal"
       :recipe="selectedRecipe"
       @rated="onRecipeRated"
+      @dismissed="onRecipeDismissed"
     />
   </section>
 </template>
@@ -199,9 +218,23 @@ const carouselItems = ref<DiscoveryItem[]>([]);
 const feedItems = ref<DiscoveryItem[]>([]);
 const currentPage = ref(1);
 const hasMore = ref(true);
+const dismissedRecipeIds = ref<Set<string>>(new Set());
 
 const showRecipeModal = ref(false);
 const selectedRecipe = ref<DiscoveryItem | null>(null);
+
+function filterDismissed(items: DiscoveryItem[]) {
+  return items.filter((item) => !dismissedRecipeIds.value.has(item.recipeId));
+}
+
+function removeRecipeFromState(recipeId: string) {
+  carouselItems.value = carouselItems.value.filter((item) => item.recipeId !== recipeId);
+  feedItems.value = feedItems.value.filter((item) => item.recipeId !== recipeId);
+  if (selectedRecipe.value?.recipeId === recipeId) {
+    selectedRecipe.value = null;
+    showRecipeModal.value = false;
+  }
+}
 
 async function loadStatusAndData() {
   try {
@@ -224,9 +257,7 @@ async function loadStatusAndData() {
 async function fetchCarousel() {
   try {
     const res = await api.recommendations.getDiscovery(1, null, 10);
-    if (res.data?.items?.length) {
-      carouselItems.value = res.data.items;
-    }
+    carouselItems.value = filterDismissed(res.data?.items ?? []);
   } catch (err) {
     console.error('Failed to fetch carousel', err);
   }
@@ -235,13 +266,14 @@ async function fetchCarousel() {
 async function fetchFeed(page: number, append = false) {
   try {
     const res = await api.recommendations.getDiscovery(page, null, 20);
-    const items = res.data?.items ?? [];
+    const rawItems = res.data?.items ?? [];
+    const items = filterDismissed(rawItems);
     if (append) {
       feedItems.value.push(...items);
     } else {
       feedItems.value = items;
     }
-    hasMore.value = items.length >= 20;
+    hasMore.value = rawItems.length >= 20;
     currentPage.value = page;
   } catch (err) {
     console.error('Failed to fetch feed', err);
@@ -268,6 +300,25 @@ function openRecipeDetail(recipe: DiscoveryItem) {
 }
 
 async function onRecipeRated() {
+  ratingCount.value = Math.min(ratingCount.value + 1, RATING_THRESHOLD);
+  await Promise.all([fetchCarousel(), fetchFeed(1)]);
+}
+
+async function dismissRecipe(recipe: DiscoveryItem) {
+  try {
+    await api.recommendations.dismiss({
+      recipeId: recipe.recipeId,
+      tags: recipe.tags,
+    });
+    await onRecipeDismissed(recipe.recipeId);
+  } catch (err) {
+    console.error('Failed to dismiss recipe', err);
+  }
+}
+
+async function onRecipeDismissed(recipeId: string) {
+  dismissedRecipeIds.value.add(recipeId);
+  removeRecipeFromState(recipeId);
   ratingCount.value = Math.min(ratingCount.value + 1, RATING_THRESHOLD);
   await Promise.all([fetchCarousel(), fetchFeed(1)]);
 }

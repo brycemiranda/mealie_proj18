@@ -1,6 +1,7 @@
 from fastapi import BackgroundTasks, Query
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+from uuid import UUID
 
 from mealie.db.models.recipe.recipe import RecipeModel
 from mealie.routes._base import BaseUserController, controller
@@ -17,6 +18,8 @@ from mealie.schema.recommendations import (
     RecommendationStatus,
 )
 from mealie.services.recommendation_service import (
+    apply_dismiss_feedback,
+    apply_rating_feedback,
     call_auto_tag,
     expand_categories_to_tags,
     fetch_discovery,
@@ -24,7 +27,6 @@ from mealie.services.recommendation_service import (
     fetch_tag_vector,
     get_or_create_prefs,
     get_prefs,
-    update_vector_on_rating,
 )
 
 router = UserAPIRouter(prefix="/recommendations", tags=["Recommendations"])
@@ -88,32 +90,43 @@ class RecommendationController(BaseUserController):
 
     @router.post("/dismiss", response_model=RecommendationAck)
     def dismiss(self, body: RecommendationDismissIn, background_tasks: BackgroundTasks):
-        recipe = (
-            self.session.execute(
-                select(RecipeModel)
-                .options(selectinload(RecipeModel.tags))
-                .filter(
-                    RecipeModel.id == body.recipe_id,
-                    RecipeModel.group_id == self.group_id,
+        recipe_tags = list(dict.fromkeys(tag.strip() for tag in body.tags if tag.strip()))
+        if not recipe_tags:
+            try:
+                recipe_id = UUID(body.recipe_id)
+            except ValueError:
+                recipe_id = None
+
+            if recipe_id is not None:
+                recipe = (
+                    self.session.execute(
+                        select(RecipeModel)
+                        .options(selectinload(RecipeModel.tags))
+                        .filter(
+                            RecipeModel.id == recipe_id,
+                            RecipeModel.group_id == self.group_id,
+                        )
+                    )
+                    .scalars()
+                    .first()
                 )
-            )
-            .scalars()
-            .first()
+                if recipe:
+                    recipe_tags = [tag.name for tag in recipe.tags]
+
+        background_tasks.add_task(
+            apply_dismiss_feedback,
+            self.user.id,
+            body.recipe_id,
+            recipe_tags,
         )
-        if recipe:
-            background_tasks.add_task(
-                update_vector_on_rating,
-                self.user.id,
-                [tag.name for tag in recipe.tags],
-                2,
-            )
         return RecommendationAck()
 
     @router.post("/rate", response_model=RecommendationAck)
     def rate_discovery(self, body: DiscoveryRatingIn, background_tasks: BackgroundTasks):
         background_tasks.add_task(
-            update_vector_on_rating,
+            apply_rating_feedback,
             self.user.id,
+            body.recipe_id,
             body.tags,
             body.rating,
         )

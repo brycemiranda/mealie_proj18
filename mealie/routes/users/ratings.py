@@ -10,7 +10,7 @@ from mealie.routes._base.routers import UserAPIRouter
 from mealie.routes.users._helpers import assert_user_change_allowed
 from mealie.schema.response.responses import ErrorResponse
 from mealie.schema.user.user import UserRatingCreate, UserRatingOut, UserRatings, UserRatingUpdate
-from mealie.services.recommendation_service import update_vector_on_rating
+from mealie.services.recommendation_service import apply_rating_feedback
 
 router = UserAPIRouter()
 
@@ -78,8 +78,9 @@ class UserRatingsController(BaseUserController):
 
         if data.rating is not None:
             background_tasks.add_task(
-                update_vector_on_rating,
+                apply_rating_feedback,
                 id,
+                recipe.id,
                 [tag.name for tag in recipe.tags],
                 data.rating,
             )
