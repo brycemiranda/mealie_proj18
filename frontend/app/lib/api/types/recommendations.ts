@@ -10,7 +10,6 @@ export interface RecommendationPreferencesIn {
 
 export interface RecommendationDismissIn {
   recipeId: string;
-  tags?: string[];
 }
 
 export interface RecommendationItem {

@@ -63,22 +63,11 @@
 
       <v-card-actions class="pa-4 bg-grey-lighten-4 d-flex flex-column align-center">
         <div class="text-subtitle-1 font-weight-medium mb-2">How does this look?</div>
-        <v-btn
-          class="mb-3"
-          color="error"
-          variant="outlined"
-          prepend-icon="mdi-thumb-down-outline"
-          :loading="submittingDismiss"
-          @click="submitDismiss"
-        >
-          Dismiss Recipe
-        </v-btn>
         <v-rating
           v-model="rating"
           color="amber"
           hover
           size="large"
-          :disabled="submittingDismiss"
           @update:modelValue="submitRating"
         ></v-rating>
       </v-card-actions>
@@ -101,12 +90,10 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void;
   (e: 'rated'): void;
-  (e: 'dismissed', recipeId: string): void;
 }>();
 
 const isOpen = ref(props.modelValue);
 const rating = ref<number>(0);
-const submittingDismiss = ref(false);
 
 watch(() => props.modelValue, (newVal) => {
   isOpen.value = newVal;
@@ -140,25 +127,6 @@ async function submitRating(val: number) {
     }, 500);
   } catch (err) {
     console.error('Failed to submit rating', err);
-  }
-}
-
-async function submitDismiss() {
-  if (!props.recipe || submittingDismiss.value) return;
-
-  submittingDismiss.value = true;
-  try {
-    await api.recommendations.dismiss({
-      recipeId: props.recipe.recipeId,
-      tags: props.recipe.tags,
-    });
-    localStorage.removeItem(`rating_${props.recipe.recipeId}`);
-    emit('dismissed', props.recipe.recipeId);
-    close();
-  } catch (err) {
-    console.error('Failed to dismiss recipe', err);
-  } finally {
-    submittingDismiss.value = false;
   }
 }
 </script>

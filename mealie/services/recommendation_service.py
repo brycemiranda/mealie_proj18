@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from typing import Any
 
 import httpx
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from mealie.db.db_setup import session_context
@@ -21,8 +21,6 @@ LEARNING_RATE = 0.1
 COLD_START_THRESHOLD = 5
 REQUEST_TIMEOUT = 15.0
 RATING_WEIGHTS: dict[int, float] = {5: 1.0, 4: 0.7, 3: 0.0, 2: -0.5, 1: -1.0}
-DISMISS_EVENT_RATING = 0
-DISMISS_WEIGHT = -1.0
 
 # Must match ingest.py CATEGORIES
 CATEGORY_TAGS: dict[str, list[str]] = {
@@ -97,38 +95,9 @@ def get_or_create_prefs(db: Session, user_id: Any) -> UserMLPreferences:
     return prefs
 
 
-def fetch_dismissed_recipe_ids(db: Session, user_id: Any) -> set[str]:
-    try:
-        rows = db.execute(
-            text(
-                """
-                SELECT DISTINCT recipe_id
-                FROM mealie_events
-                WHERE user_id = :user_id AND event_type = 'dismiss'
-                """
-            ),
-            {"user_id": str(user_id)},
-        ).scalars()
-        return {str(recipe_id) for recipe_id in rows if recipe_id}
-    except Exception as exc:
-        log.warning("failed to fetch dismissed recipe ids for %s: %s", user_id, exc)
-        return set()
-
-
 def _clean_tags(tags: Iterable[str]) -> list[str]:
     cleaned = [tag.strip() for tag in tags if isinstance(tag, str) and tag.strip()]
     return list(dict.fromkeys(cleaned))
-
-
-def _normalize_rating_value(star_rating: Any) -> int:
-    return int(float(star_rating))
-
-
-def feedback_weight_for_rating(star_rating: Any) -> float:
-    try:
-        return RATING_WEIGHTS.get(_normalize_rating_value(star_rating), 0.0)
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def _normalize_vector(vector: Any) -> list[float] | None:
@@ -205,9 +174,6 @@ async def fetch_recommendations(
     top_n: int = 10,
 ) -> dict[str, Any]:
     library_recipes = [_serialize_recipe(recipe) for recipe in recipes]
-    dismissed_recipe_ids = fetch_dismissed_recipe_ids(db, user_id)
-    if dismissed_recipe_ids:
-        library_recipes = [recipe for recipe in library_recipes if recipe["recipe_id"] not in dismissed_recipe_ids]
     if not library_recipes:
         return {
             "recommendations": [],
@@ -280,37 +246,8 @@ async def fetch_recommendations(
     }
 
 
-def record_feedback_event(
-    user_id: Any,
-    recipe_id: Any,
-    event_type: str,
-    *,
-    rating: int | None = None,
-    weight: float = 0.0,
-) -> None:
-    try:
-        with session_context() as db:
-            db.execute(
-                text(
-                    """
-                    INSERT INTO mealie_events (user_id, recipe_id, event_type, rating, weight)
-                    VALUES (:user_id, :recipe_id, :event_type, :rating, :weight)
-                    """
-                ),
-                {
-                    "user_id": str(user_id),
-                    "recipe_id": str(recipe_id),
-                    "event_type": event_type,
-                    "rating": rating,
-                    "weight": weight,
-                },
-            )
-            db.commit()
-    except Exception as exc:
-        log.warning("failed to record %s event for %s/%s: %s", event_type, user_id, recipe_id, exc)
-
-
-def _apply_feedback_weight(user_id: Any, recipe_tags: Iterable[str], weight: float) -> None:
+def update_vector_on_rating(user_id: Any, recipe_tags: Iterable[str], star_rating: int) -> None:
+    weight = RATING_WEIGHTS.get(int(star_rating), 0.0)
     cleaned_tags = _clean_tags(recipe_tags)
 
     with session_context() as db:
@@ -337,25 +274,3 @@ def _apply_feedback_weight(user_id: Any, recipe_tags: Iterable[str], weight: flo
             for user_value, recipe_value in zip(user_vector, recipe_vector)
         ]
         db.commit()
-
-
-def update_vector_on_rating(user_id: Any, recipe_tags: Iterable[str], star_rating: int) -> None:
-    _apply_feedback_weight(user_id, recipe_tags, feedback_weight_for_rating(star_rating))
-
-
-def apply_rating_feedback(user_id: Any, recipe_id: Any, recipe_tags: Iterable[str], star_rating: Any) -> None:
-    rating_value = _normalize_rating_value(star_rating)
-    weight = feedback_weight_for_rating(rating_value)
-    record_feedback_event(user_id, recipe_id, "rating", rating=rating_value, weight=weight)
-    _apply_feedback_weight(user_id, recipe_tags, weight)
-
-
-def apply_dismiss_feedback(user_id: Any, recipe_id: Any, recipe_tags: Iterable[str]) -> None:
-    record_feedback_event(
-        user_id,
-        recipe_id,
-        "dismiss",
-        rating=DISMISS_EVENT_RATING,
-        weight=DISMISS_WEIGHT,
-    )
-    _apply_feedback_weight(user_id, recipe_tags, DISMISS_WEIGHT)
